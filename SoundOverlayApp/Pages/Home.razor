@@ -51,15 +51,17 @@ Welcome to your new app.
         @if (i == this.currentTrack)
         {
             <li>
-                <u>@(this.tracks[i][5..])</u>
+                <u>@(this.tracks[i][6..])</u>
             </li>
         }
         else
         {
-            <li>@(this.tracks[i][5..])</li>
+            <li>@(this.tracks[i][6..])</li>
         }
     }
 </ol>
+
+<button @onclick="this.AddTrack">Add</button>
 
 
 @code {
@@ -235,6 +237,11 @@ Welcome to your new app.
     public async ValueTask DisposeAsync()
     {
         await this.Pause();
+    }
+
+    private void AddTrack()
+    {
+        this.tracks.Add(this.tracks[0]);
     }
 
 }
