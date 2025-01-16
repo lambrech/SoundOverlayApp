@@ -1,0 +1,250 @@
+﻿@page "/"
+
+@* <PageTitle>Home</PageTitle>
+
+<h1>Hello, world!</h1>
+
+Welcome to your new app.
+
+@page "/AudioPlayer" *@
+@using KristofferStrube.Blazor.WebAudio
+@using System.Globalization
+@implements IAsyncDisposable
+@inject IJSRuntime JSRuntime
+@inject HttpClient HttpClient
+<PageTitle>WebAudio - Audio Player</PageTitle>
+<h2>Audio Player</h2>
+
+<div style="display: flex; flex-direction: row; user-select: none;" aria-label="Player controls">
+    <button class="media-control" aria-label="Randomize tracks" @onclick="this.RandomizeTracks">🔀</button>
+    <button class="media-control" aria-label="Previous track" @onclick="this.PreivousTrack">⏮</button>
+    @if (this.playing)
+    {
+        <button class="media-control" aria-label="Pause" @onclick=this.Pause>⏸</button>
+    }
+    else
+    {
+        <button class="media-control" aria-label="Play" @onclick=this.Play>⏯</button>
+    }
+    <button class="media-control" aria-label="Next track" @onclick="this.NextTrack">⏭</button>
+</div>
+<span style="display: inline-block; text-align: right; width: 5%;">
+    @Math.Round(this.playTime, 0)
+</span>
+<svg width="60%" viewBox="0 0 1 0.02" style="margin-left: 5px; margin-right: 5px;">
+    <rect fill="#bbb" x="0" y="0" width="1" height="0.02"></rect>
+    @if (this.trackDuration is not 0)
+    {
+        <rect fill="#555" x="0" y="0" width="@((this.playTime / this.trackDuration).ToString(CultureInfo.InvariantCulture))" height="0.02"></rect>
+    }
+</svg>
+<span style="display: inline-block; width: 5%;">
+    @(this.trackDuration > 0 ? Math.Round(this.trackDuration, 0) : "")
+</span>
+<ol>
+    @for (var i = 0; i < this.tracks.Count; i++)
+    {
+        @if (i == this.currentTrack)
+        {
+            <li>
+                <u>@(this.tracks[i][5..])</u>
+            </li>
+        }
+        else
+        {
+            <li>@(this.tracks[i][5..])</li>
+        }
+    }
+</ol>
+
+
+@code {
+
+    private bool playing;
+
+    private bool currentTrackLoaded;
+
+    private int currentTrack;
+
+    private double playTime;
+
+    private double startTime;
+
+    private double? pauseTime;
+
+    private double offset;
+
+    private double trackDuration;
+
+    private int interactions;
+
+    private List<string> tracks = new()
+    {
+        "media/3-2-1-go.mp3"
+    };
+
+    private byte[]?[] loadedTracks = new byte[]?[4];
+
+    private AudioContext context = default!;
+
+    private AudioDestinationNode destination = default!;
+
+    private AudioBufferSourceNode currentAudioBufferNode = default!;
+
+    private AudioBuffer currentAudioBuffer = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await this.EnsureInitialized();
+            await this.EnsureCurrentTrackLoaded();
+        }
+        catch
+        {
+            Console.WriteLine("Couldn't initialize yet.");
+        }
+    }
+
+    public async Task EnsureInitialized()
+    {
+        if (this.context is { }) return;
+
+        this.context = await AudioContext.CreateAsync(this.JSRuntime);
+        this.destination = await this.context.GetDestinationAsync();
+    }
+
+    public async Task EnsureCurrentTrackLoaded()
+    {
+        if (this.currentTrackLoaded) return;
+
+    // Dispose old audio buffer
+        if (this.currentAudioBuffer is not null)
+        {
+            await this.currentAudioBuffer.DisposeAsync();
+        }
+
+        if (this.loadedTracks[this.currentTrack] is null)
+        {
+            this.loadedTracks[this.currentTrack] = await this.HttpClient.GetByteArrayAsync(this.tracks[this.currentTrack]);
+        }
+        var nextAudioBuffer = await this.context.DecodeAudioDataAsync(this.loadedTracks[this.currentTrack]);
+
+        this.currentAudioBuffer = nextAudioBuffer;
+        this.trackDuration = await this.currentAudioBuffer.GetDurationAsync();
+
+        this.currentTrackLoaded = true;
+    }
+
+    public async Task Play()
+    {
+        await this.EnsureInitialized();
+        if (this.playing) return;
+        this.interactions++;
+        await this.EnsureCurrentTrackLoaded();
+
+        this.currentAudioBufferNode = await this.context.CreateBufferSourceAsync();
+        await this.currentAudioBufferNode.SetBufferAsync(this.currentAudioBuffer);
+        await this.currentAudioBufferNode.ConnectAsync(this.destination);
+        if (this.pauseTime is null)
+        {
+            await this.currentAudioBufferNode.StartAsync();
+        }
+        else
+        {
+            await this.currentAudioBufferNode.StartAsync(0, this.offset);
+        }
+        this.startTime = await this.context.GetCurrentTimeAsync();
+
+        this.playing = true;
+        var currentInteractions = this.interactions;
+        while (currentInteractions == this.interactions)
+        {
+            this.playTime = await this.context.GetCurrentTimeAsync() - this.startTime + this.offset;
+            this.StateHasChanged();
+            if (this.playTime >= this.trackDuration)
+            {
+                await this.NextTrack();
+            }
+            await Task.Delay(100);
+        }
+    }
+
+    public async Task Pause()
+    {
+        if (!this.playing) return;
+        this.interactions++;
+
+        await this.currentAudioBufferNode.DisconnectAsync();
+        await this.currentAudioBufferNode.StopAsync();
+        await this.currentAudioBufferNode.DisposeAsync();
+
+        var currentTime = await this.context.GetCurrentTimeAsync();
+        this.pauseTime = await this.context.GetCurrentTimeAsync();
+        if (this.offset + currentTime - this.startTime > this.trackDuration)
+        {
+            this.offset = 0;
+        }
+        else
+        {
+            this.offset += currentTime - this.startTime;
+        }
+
+        this.playing = false;
+    }
+
+    public Task PreivousTrack()
+    {
+        return this.SwitchTrack(() => this.currentTrack = (this.currentTrack - 1 + this.tracks.Count) % this.tracks.Count);
+    }
+
+    public Task NextTrack()
+    {
+        return this.SwitchTrack(() => this.currentTrack = (this.currentTrack + 1) % this.tracks.Count);
+    }
+
+    private async Task SwitchTrack(Action changeTrack)
+    {
+        await this.EnsureInitialized();
+
+        var wasPlaying = this.playing;
+        if (wasPlaying)
+        {
+            await this.Pause();
+        }
+        changeTrack();
+        this.currentTrackLoaded = false;
+        await this.EnsureCurrentTrackLoaded();
+        this.offset = 0;
+        this.playTime = 0;
+        if (wasPlaying)
+        {
+            await this.Play();
+        }
+    }
+
+    public async Task RandomizeTracks()
+    {
+        var wasPlaying = this.playing;
+        if (wasPlaying)
+        {
+            await this.Pause();
+        }
+        this.tracks = this.tracks.OrderBy(x => Random.Shared.Next()).ToList();
+        this.loadedTracks = new byte[]?[4];
+        this.currentTrackLoaded = false;
+        this.currentTrack = 0;
+        this.offset = 0;
+        this.playTime = 0;
+        if (wasPlaying)
+        {
+            await this.Play();
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await this.Pause();
+    }
+
+}
