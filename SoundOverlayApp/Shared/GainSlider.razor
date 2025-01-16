@@ -1,0 +1,38 @@
+﻿@using KristofferStrube.Blazor.WebAudio
+<label for="@(this.inputId)">Gain</label>
+<input @bind-value="this.Gain"
+       @bind-value:event="oninput"
+       @bind-value:after="GainUpdatedAsync"
+       id="@(this.inputId)"
+       type="range"
+       min="0"
+       max="1"
+       step="0.01"
+       style="width: min(200px, 100%);"/>
+<span class="badge bg-primary">@Math.Round(this.Gain * 100, 0)%</span>
+
+@code {
+
+    private readonly string inputId = $"gain_{Guid.NewGuid()}"[..9];
+
+    [Parameter]
+    [EditorRequired]
+    public GainNode? GainNode { get; set; }
+
+    public float Gain { get; private set; } = 0.05f;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (this.GainNode is null) return;
+        await using var audioParam = await this.GainNode.GetGainAsync();
+        this.Gain = await audioParam.GetValueAsync();
+    }
+
+    public async Task GainUpdatedAsync()
+    {
+        if (this.GainNode is null) return;
+        await using var audioParam = await this.GainNode.GetGainAsync();
+        await audioParam.SetValueAsync(this.Gain);
+    }
+
+}

@@ -9,15 +9,19 @@ Welcome to your new app.
 @page "/AudioPlayer" *@
 @using KristofferStrube.Blazor.WebAudio
 @using System.Globalization
+@using SoundOverlayApp.Shared
 @implements IAsyncDisposable
 @inject IJSRuntime JSRuntime
 @inject HttpClient HttpClient
 <PageTitle>WebAudio - Audio Player</PageTitle>
 <h2>Audio Player</h2>
 
+<br />
+<GainSlider GainNode="this.gainNode" />
+<br />
+
 <div style="display: flex; flex-direction: row; user-select: none;" aria-label="Player controls">
-    <button class="media-control" aria-label="Randomize tracks" @onclick="this.RandomizeTracks">🔀</button>
-    <button class="media-control" aria-label="Previous track" @onclick="this.PreivousTrack">⏮</button>
+    <button class="media-control" aria-label="Previous track" @onclick="this.PreviousTrack">⏮</button>
     @if (this.playing)
     {
         <button class="media-control" aria-label="Pause" @onclick=this.Pause>⏸</button>
@@ -59,6 +63,8 @@ Welcome to your new app.
 
 
 @code {
+
+    GainNode gainNode = default!;
 
     private bool playing;
 
@@ -112,6 +118,9 @@ Welcome to your new app.
 
         this.context = await AudioContext.CreateAsync(this.JSRuntime);
         this.destination = await this.context.GetDestinationAsync();
+
+        this.gainNode = await GainNode.CreateAsync(this.JSRuntime, this.context, new() { Gain = 0.1f });
+        await this.gainNode.ConnectAsync(this.destination);
     }
 
     public async Task EnsureCurrentTrackLoaded()
@@ -145,7 +154,7 @@ Welcome to your new app.
 
         this.currentAudioBufferNode = await this.context.CreateBufferSourceAsync();
         await this.currentAudioBufferNode.SetBufferAsync(this.currentAudioBuffer);
-        await this.currentAudioBufferNode.ConnectAsync(this.destination);
+        await this.currentAudioBufferNode.ConnectAsync(this.gainNode);
         if (this.pauseTime is null)
         {
             await this.currentAudioBufferNode.StartAsync();
@@ -193,7 +202,7 @@ Welcome to your new app.
         this.playing = false;
     }
 
-    public Task PreivousTrack()
+    public Task PreviousTrack()
     {
         return this.SwitchTrack(() => this.currentTrack = (this.currentTrack - 1 + this.tracks.Count) % this.tracks.Count);
     }
@@ -215,25 +224,6 @@ Welcome to your new app.
         changeTrack();
         this.currentTrackLoaded = false;
         await this.EnsureCurrentTrackLoaded();
-        this.offset = 0;
-        this.playTime = 0;
-        if (wasPlaying)
-        {
-            await this.Play();
-        }
-    }
-
-    public async Task RandomizeTracks()
-    {
-        var wasPlaying = this.playing;
-        if (wasPlaying)
-        {
-            await this.Pause();
-        }
-        this.tracks = this.tracks.OrderBy(x => Random.Shared.Next()).ToList();
-        this.loadedTracks = new byte[]?[4];
-        this.currentTrackLoaded = false;
-        this.currentTrack = 0;
         this.offset = 0;
         this.playTime = 0;
         if (wasPlaying)
