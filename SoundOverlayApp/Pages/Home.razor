@@ -126,9 +126,7 @@ Welcome to your new app.
 
     private AudioBuffer currentAudioBuffer = default!;
 
-    private string inputValue;
-
-    private string WorkoutInSeconds;
+    private string WorkoutInSeconds = "10";
 
     public bool WithBeep { get; set; }
 
@@ -228,7 +226,7 @@ Welcome to your new app.
             {
                 var beepBuf = await AudioBuffer.CreateAsync(this.JSRuntime, new AudioBufferOptions() { Length = (ulong)(sampleRate * 0.4), SampleRate = sampleRate });
                 var beepLength = await beepBuf.GetLengthAsync();
-                var beepCh = await buf.GetChannelDataAsync(0);
+                var beepCh = await beepBuf.GetChannelDataAsync(0);
                 for (ulong i = 0; i < beepLength; i++)
                 {
                     var val = (float)Math.Sin(2 * Math.PI * 1250 * (i / sampleRate));
