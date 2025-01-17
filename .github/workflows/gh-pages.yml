@@ -1,0 +1,64 @@
+name: publish to github pages workflow
+
+on:
+  push:
+    branches:
+      - master
+      
+env:
+  project_path: './SoundOverlayApp/'
+ 
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      # Checkout the code
+      - uses: actions/checkout@v4
+      
+      # Install .NET Core SDK
+      - name: Setup .NET Core
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.102
+
+      - name: Setup wasm workload
+        run: dotnet workload install wasm-tools
+        shell: bash
+      
+      - name: Substitute base href
+        run: sed -i 's/base href="\/"/base href="\/${{ github.event.repository.name }}\/"/' ${{ env.project_path }}wwwroot/index.html
+        shell: bash
+
+      - name: Substitute base href service worker
+        run: sed -i 's/const base = "\/"/const base = "\/${{ github.event.repository.name }}\/"/' ${{ env.project_path }}wwwroot/service-worker.published.js
+        shell: bash
+        
+      - name: Setup SPA 404 page redirection
+        run: |
+          cp ${{ env.project_path }}AdditionalDeployFiles/404.html ${{ env.project_path }}wwwroot
+          cp ${{ env.project_path }}AdditionalDeployFiles/redirect.js ${{ env.project_path }}wwwroot
+          sed -i '/blazor.webassembly.js/i \    <script src="redirect.js"><\/script>' ${{ env.project_path }}wwwroot/index.html
+        shell: bash
+        
+      - name: Publish application
+        run: dotnet publish ${{ env.project_path}} -c Release -o ${{ runner.temp }}/${{ env.project_path }}
+        shell: bash
+        
+      - name: Create gh-pages branch
+        run: |
+          git checkout --orphan gh-pages
+          git clean -fdx
+          git rm -rf .
+          cp -r ${{ runner.temp }}/${{ env.project_path }}wwwroot/. .
+          touch .nojekyll
+        shell: bash
+        
+      - name: Commit and push
+        run: |
+          git add .
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git commit -m 'Deploy application to GitHub Pages'
+          git push -f -u origin gh-pages
+        shell: bash
