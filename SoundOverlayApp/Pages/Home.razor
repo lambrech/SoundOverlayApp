@@ -9,15 +9,19 @@ Welcome to your new app.
 @page "/AudioPlayer" *@
 @using KristofferStrube.Blazor.WebAudio
 @using System.Globalization
+@using System.Reflection
+@using KristofferStrube.Blazor.WebIDL
 @using SoundOverlayApp.Shared
 @implements IAsyncDisposable
 @inject IJSRuntime JSRuntime
 @inject HttpClient HttpClient
 <PageTitle>WebAudio - Audio Player</PageTitle>
 <h2>Audio Player</h2>
+<p>@(Extensions.GetVersionInformation().version)</p>
 
 <br />
 <GainSlider GainNode="this.gainNode" />
+<br />
 <br />
 
 <div style="display: flex; flex-direction: row; user-select: none;" aria-label="Player controls">
@@ -32,6 +36,7 @@ Welcome to your new app.
     }
     <button class="media-control" aria-label="Next track" @onclick="this.NextTrack">⏭</button>
 </div>
+<br/>
 <span style="display: inline-block; text-align: right; width: 5%;">
     @Math.Round(this.playTime, 0)
 </span>
@@ -45,24 +50,47 @@ Welcome to your new app.
 <span style="display: inline-block; width: 5%;">
     @(this.trackDuration > 0 ? Math.Round(this.trackDuration, 0) : "")
 </span>
+
+<br />
+<br />
+<br />
+
+<button @onclick="this.AddStartTrack">Add Start</button>
+<br />
+<br />
+<button @onclick="this.AddStopTrack">Add Stop</button>
+<br />
+<br />
+<button @onclick="this.AddWorkoutTrack">Add silence</button>
+<label>
+    silence time in seconds:
+    <input @bind="this.WorkoutInSeconds" />
+    Halbzeit Beep hinzufügen
+    <input type="checkbox" @bind="this.WithBeep" />
+    - first beep generation takes a few seconds
+</label>
+<br />
+
 <ol>
     @for (var i = 0; i < this.tracks.Count; i++)
     {
-        @if (i == this.currentTrack)
-        {
-            <li>
-                <u>@(this.tracks[i][6..])</u>
-            </li>
-        }
-        else
-        {
-            <li>@(this.tracks[i][6..])</li>
-        }
+        <li>
+            @{
+                var tmp = i;
+                @if (i == this.currentTrack)
+                {
+                    <u>@(this.tracks[i])</u>
+                }
+                else
+                {
+                    @(this.tracks[i])
+                }
+
+                <button @onclick="() => this.tracks.RemoveAt(tmp)">X</button>
+            }
+        </li>
     }
 </ol>
-
-<button @onclick="this.AddTrack">Add</button>
-
 
 @code {
 
@@ -86,12 +114,9 @@ Welcome to your new app.
 
     private int interactions;
 
-    private List<string> tracks = new()
-    {
-        "media/3-2-1-go.mp3"
-    };
+    private List<string> tracks = new();
 
-    private byte[]?[] loadedTracks = new byte[]?[4];
+    private Dictionary<string, AudioBuffer> loadedBuffers = new Dictionary<string, AudioBuffer>();
 
     private AudioContext context = default!;
 
@@ -101,18 +126,38 @@ Welcome to your new app.
 
     private AudioBuffer currentAudioBuffer = default!;
 
+    private string inputValue;
+
+    private string WorkoutInSeconds;
+
+    public bool WithBeep { get; set; }
+
+    private const string trackStart = "media/3-2-1-go.mp3";
+    private const string trackStartName = "3-2-1-go.mp3";
+
+    private const string trackStop = "media/3-2-1-stop.mp3";
+    private const string trackStopName = "3-2-1-stop.mp3";
+
     protected override async Task OnInitializedAsync()
     {
         try
         {
             await this.EnsureInitialized();
-            await this.EnsureCurrentTrackLoaded();
+            // await this.EnsureCurrentTrackLoaded();
+
+            var start = await this.HttpClient.GetByteArrayAsync(trackStart);
+            this.loadedBuffers[trackStartName] = await this.context.DecodeAudioDataAsync(start);
+
+            var stop = await this.HttpClient.GetByteArrayAsync(trackStop);
+            this.loadedBuffers[trackStopName] = await this.context.DecodeAudioDataAsync(stop);
         }
         catch
         {
             Console.WriteLine("Couldn't initialize yet.");
         }
     }
+
+    Float32Array? beepArray;
 
     public async Task EnsureInitialized()
     {
@@ -121,30 +166,92 @@ Welcome to your new app.
         this.context = await AudioContext.CreateAsync(this.JSRuntime);
         this.destination = await this.context.GetDestinationAsync();
 
-        this.gainNode = await GainNode.CreateAsync(this.JSRuntime, this.context, new() { Gain = 0.1f });
+        this.gainNode = await GainNode.CreateAsync(this.JSRuntime, this.context, new() { Gain = 0.5f });
         await this.gainNode.ConnectAsync(this.destination);
     }
 
-    public async Task EnsureCurrentTrackLoaded()
+    // public async Task EnsureCurrentTrackLoaded()
+    // {
+    //     if (this.currentTrackLoaded) return;
+
+    //     // Dispose old audio buffer
+    //     // if (this.currentAudioBuffer is not null)
+    //     // {
+    //     //     await this.currentAudioBuffer.DisposeAsync();
+    //     // }
+
+    //     var track = this.tracks[this.currentTrack];
+    //     if (!this.loadedBuffers.ContainsKey(track))
+    //     {
+    //         if (track == "testtest")
+    //         {
+    //             var sampleRate = await this.context.GetSampleRateAsync();
+    //             var buf = await AudioBuffer.CreateAsync(this.JSRuntime, new AudioBufferOptions() { Length = (ulong)(sampleRate * 0.5), SampleRate = sampleRate });
+    //             var lengthAsync = await buf.GetLengthAsync();
+    //             // var b = new List<float>();
+    //             // for (var i = 0; i < (int)lengthAsync; i++) {
+    //             //     channelData[i] = Math.sin(2 * Math.PI * frequency * (i / sampleRate)); // Sine wave
+    //             // }
+
+    //             var ch = await buf.GetChannelDataAsync(0);
+
+    //             for (ulong i = 0; i < lengthAsync; i++)
+    //             {
+    //                 var val = (float)Math.Sin(2 * Math.PI * 1250 * (i / sampleRate));
+    //                 await ch.FillAsync(val, (long)i);
+    //             }
+
+    //             this.loadedBuffers[track] = buf;
+    //         }
+    //         else
+    //         {
+    //             this.loadedTracks[this.currentTrack] = await this.HttpClient.GetByteArrayAsync(track);
+    //             this.loadedBuffers[track] = await this.context.DecodeAudioDataAsync(this.loadedTracks[this.currentTrack]);
+    //         }
+    //     }
+
+    //     this.currentAudioBuffer = this.loadedBuffers[track];
+    //     this.trackDuration = await this.currentAudioBuffer.GetDurationAsync();
+
+    //     this.currentTrackLoaded = true;
+    // }
+
+    public async Task<AudioBuffer> GenerateSilenceBuffer(int seconds, bool halfTimeBeep = false)
     {
-        if (this.currentTrackLoaded) return;
+        var sampleRate = await this.context.GetSampleRateAsync();
+        var buf = await AudioBuffer.CreateAsync(this.JSRuntime, new AudioBufferOptions() { Length = (ulong)(sampleRate * seconds), SampleRate = sampleRate });
+        var lengthAsync = await buf.GetLengthAsync();
 
-    // Dispose old audio buffer
-        if (this.currentAudioBuffer is not null)
+        if (halfTimeBeep)
         {
-            await this.currentAudioBuffer.DisposeAsync();
+            if (this.beepArray == null)
+            {
+                var beepBuf = await AudioBuffer.CreateAsync(this.JSRuntime, new AudioBufferOptions() { Length = (ulong)(sampleRate * 0.4), SampleRate = sampleRate });
+                var beepLength = await beepBuf.GetLengthAsync();
+                var beepCh = await buf.GetChannelDataAsync(0);
+                for (ulong i = 0; i < beepLength; i++)
+                {
+                    var val = (float)Math.Sin(2 * Math.PI * 1250 * (i / sampleRate));
+                    await beepCh.FillAsync(val, (long)i);
+                }
+
+                this.beepArray = beepCh;
+            }
+
+            // var ch = await buf.GetChannelDataAsync(0);
+            var beepStart = lengthAsync / 2;
+            // var beepEnd = beepStart + (sampleRate / 2);
+            await buf.CopyToChannelAsync(this.beepArray, 0, beepStart);
+
+            // for (ulong i = beepStart; i < beepEnd; i++)
+            // {
+            //     var val = (float)Math.Sin(2 * Math.PI * 1250 * (i / sampleRate));
+            //     await ch.FillAsync(val, (long)i);
+            // }
+
         }
 
-        if (this.loadedTracks[this.currentTrack] is null)
-        {
-            this.loadedTracks[this.currentTrack] = await this.HttpClient.GetByteArrayAsync(this.tracks[this.currentTrack]);
-        }
-        var nextAudioBuffer = await this.context.DecodeAudioDataAsync(this.loadedTracks[this.currentTrack]);
-
-        this.currentAudioBuffer = nextAudioBuffer;
-        this.trackDuration = await this.currentAudioBuffer.GetDurationAsync();
-
-        this.currentTrackLoaded = true;
+        return buf;
     }
 
     public async Task Play()
@@ -152,10 +259,13 @@ Welcome to your new app.
         await this.EnsureInitialized();
         if (this.playing) return;
         this.interactions++;
-        await this.EnsureCurrentTrackLoaded();
+        // await this.EnsureCurrentTrackLoaded();
 
         this.currentAudioBufferNode = await this.context.CreateBufferSourceAsync();
-        await this.currentAudioBufferNode.SetBufferAsync(this.currentAudioBuffer);
+        var loadedBuffer = this.loadedBuffers[this.tracks[this.currentTrack]];
+        this.trackDuration = await loadedBuffer.GetDurationAsync();
+        this.trackDuration = await loadedBuffer.GetDurationAsync();
+        await this.currentAudioBufferNode.SetBufferAsync(loadedBuffer);
         await this.currentAudioBufferNode.ConnectAsync(this.gainNode);
         if (this.pauseTime is null)
         {
@@ -206,11 +316,21 @@ Welcome to your new app.
 
     public Task PreviousTrack()
     {
+        if (this.tracks.Count == 0)
+        {
+            return Task.CompletedTask;
+        }
+
         return this.SwitchTrack(() => this.currentTrack = (this.currentTrack - 1 + this.tracks.Count) % this.tracks.Count);
     }
 
     public Task NextTrack()
     {
+        if (this.tracks.Count == 0)
+        {
+            return Task.CompletedTask;
+        }
+
         return this.SwitchTrack(() => this.currentTrack = (this.currentTrack + 1) % this.tracks.Count);
     }
 
@@ -224,8 +344,8 @@ Welcome to your new app.
             await this.Pause();
         }
         changeTrack();
-        this.currentTrackLoaded = false;
-        await this.EnsureCurrentTrackLoaded();
+        // this.currentTrackLoaded = false;
+        // await this.EnsureCurrentTrackLoaded();
         this.offset = 0;
         this.playTime = 0;
         if (wasPlaying)
@@ -239,9 +359,25 @@ Welcome to your new app.
         await this.Pause();
     }
 
-    private void AddTrack()
+    private void AddStartTrack()
     {
-        this.tracks.Add(this.tracks[0]);
+        this.tracks.Add(trackStartName);
+    }
+
+    private void AddStopTrack()
+    {
+        this.tracks.Add(trackStopName);
+    }
+
+    private async Task AddWorkoutTrack()
+    {
+        if (int.TryParse(this.WorkoutInSeconds, out var seconds))
+        {
+            var buf = await this.GenerateSilenceBuffer(seconds, this.WithBeep);
+            var trackName = $"Silence - {seconds} Sekunden{(this.WithBeep ? $" - mit Halbzeit Beep" : "")}";
+            this.tracks.Add(trackName);
+            this.loadedBuffers[trackName] = buf;
+        }
     }
 
 }
