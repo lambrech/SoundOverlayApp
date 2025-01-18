@@ -1,50 +1,38 @@
 ﻿@page "/"
 
-@* <PageTitle>Home</PageTitle>
-
-<h1>Hello, world!</h1>
-
-Welcome to your new app.
-
-@page "/AudioPlayer" *@
 @using KristofferStrube.Blazor.WebAudio
 @using System.Globalization
-@using System.Reflection
 @using KristofferStrube.Blazor.WebIDL
-@using SoundOverlayApp.Shared
 @implements IAsyncDisposable
 @inject IJSRuntime JSRuntime
 @inject HttpClient HttpClient
-<PageTitle>WebAudio - Audio Player</PageTitle>
-<h2>Audio Player</h2>
-<p>@(Extensions.GetVersionInformation().version)</p>
 
-<br />
+<div class="mx-4">
 <GainSlider GainNode="this.gainNode" />
 <br />
 <br />
 
 <div style="display: flex; flex-direction: row; user-select: none;" aria-label="Player controls">
-    <button class="media-control" aria-label="Previous track" @onclick="this.PreviousTrack">⏮</button>
+    <MudButton Variant="Variant.Outlined" Size="Size.Small" Class="mx-4 media-control" aria-label="Previous track" @onclick="this.PreviousTrack">⏮</MudButton>
     @if (this.playing)
     {
-        <button class="media-control" aria-label="Pause" @onclick=this.Pause>⏸</button>
+            <MudButton Variant="Variant.Outlined" Size="Size.Small" Class="mx-4 media-control" aria-label="Pause" @onclick=this.Pause>⏸</MudButton>
     }
     else
     {
-        <button class="media-control" aria-label="Play" @onclick=this.Play>⏯</button>
+            <MudButton Variant="Variant.Outlined" Size="Size.Small" Class="mx-4 media-control" aria-label="Play" @onclick=this.Play>⏯</MudButton>
     }
-    <button class="media-control" aria-label="Next track" @onclick="this.NextTrack">⏭</button>
+        <MudButton Variant="Variant.Outlined" Size="Size.Small" Class="mx-4 media-control" aria-label="Next track" @onclick="this.NextTrack">⏭</MudButton>
 </div>
 <br/>
 <span style="display: inline-block; text-align: right; width: 5%;">
     @Math.Round(this.playTime, 0)
 </span>
-<svg width="60%" viewBox="0 0 1 0.02" style="margin-left: 5px; margin-right: 5px;">
-    <rect fill="#bbb" x="0" y="0" width="1" height="0.02"></rect>
+<svg width="60%" viewBox="0 0 1 0.05" style="margin-left: 5px; margin-right: 5px;">
+    <rect fill="#bbb" x="0" y="0" width="1" height="0.05"></rect>
     @if (this.trackDuration is not 0)
     {
-        <rect fill="#555" x="0" y="0" width="@((this.playTime / this.trackDuration).ToString(CultureInfo.InvariantCulture))" height="0.02"></rect>
+        <rect fill="#555" x="0" y="0" width="@((this.playTime / this.trackDuration).ToString(CultureInfo.InvariantCulture))" height="0.05"></rect>
     }
 </svg>
 <span style="display: inline-block; width: 5%;">
@@ -55,42 +43,44 @@ Welcome to your new app.
 <br />
 <br />
 
-<button @onclick="this.AddStartTrack">Add Start</button>
+<MudButton Variant="Variant.Outlined" @onclick="this.AddStartTrack">Add Start</MudButton>
 <br />
 <br />
-<button @onclick="this.AddStopTrack">Add Stop</button>
+<MudButton Variant="Variant.Outlined" @onclick="this.AddStopTrack">Add Stop</MudButton>
 <br />
 <br />
-<button @onclick="this.AddWorkoutTrack">Add silence</button>
-<label>
+<MudButton Variant="Variant.Outlined" @onclick="this.AddSilenceTrack">Add silence</MudButton>
+<MudText>silence time in seconds:</MudText>
+<MudInputString Variant="Variant.Outlined" Immediate="true" Margin="Margin.Dense" @bind-Value="this.SilenceInSeconds"></MudInputString>
+<MudCheckBox @bind-Value="this.WithBeep">Halbzeit Beep hinzufügen</MudCheckBox>
+@* <label>
     silence time in seconds:
-    <input @bind="this.WorkoutInSeconds" />
+    <input @bind="this.SilenceInSeconds" />
     Halbzeit Beep hinzufügen
     <input type="checkbox" @bind="this.WithBeep" />
     - first beep generation takes a few seconds
-</label>
+</label> *@
 <br />
 
-<ol>
+<MudList T="string">
     @for (var i = 0; i < this.tracks.Count; i++)
     {
-        <li>
-            @{
-                var tmp = i;
-                @if (i == this.currentTrack)
+            var tmp = i;
+            <MudListItem>
+                @if (tmp == this.currentTrack)
                 {
-                    <u>@(this.tracks[i])</u>
+                    <u>@(this.tracks[tmp])</u>
                 }
                 else
                 {
-                    @(this.tracks[i])
+                    @(this.tracks[tmp])
                 }
 
-                <button style="margin-left: 12px; margin-bottom: 4px;" @onclick="() => this.tracks.RemoveAt(tmp)">X</button>
-            }
-        </li>
+                <MudIconButton Style="margin-left: 12px; margin-bottom: 4px;" Size="Size.Small" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Delete" aria-label="delete" @onclick="() => this.tracks.RemoveAt(tmp)" />
+            </MudListItem>
     }
-</ol>
+    </MudList>
+</div>
 
 @code {
 
@@ -126,7 +116,7 @@ Welcome to your new app.
 
     private AudioBuffer currentAudioBuffer = default!;
 
-    private string WorkoutInSeconds = "10";
+    private string SilenceInSeconds = "10";
 
     public bool WithBeep { get; set; }
 
@@ -167,52 +157,6 @@ Welcome to your new app.
         this.gainNode = await GainNode.CreateAsync(this.JSRuntime, this.context, new() { Gain = 0.5f });
         await this.gainNode.ConnectAsync(this.destination);
     }
-
-    // public async Task EnsureCurrentTrackLoaded()
-    // {
-    //     if (this.currentTrackLoaded) return;
-
-    //     // Dispose old audio buffer
-    //     // if (this.currentAudioBuffer is not null)
-    //     // {
-    //     //     await this.currentAudioBuffer.DisposeAsync();
-    //     // }
-
-    //     var track = this.tracks[this.currentTrack];
-    //     if (!this.loadedBuffers.ContainsKey(track))
-    //     {
-    //         if (track == "testtest")
-    //         {
-    //             var sampleRate = await this.context.GetSampleRateAsync();
-    //             var buf = await AudioBuffer.CreateAsync(this.JSRuntime, new AudioBufferOptions() { Length = (ulong)(sampleRate * 0.5), SampleRate = sampleRate });
-    //             var lengthAsync = await buf.GetLengthAsync();
-    //             // var b = new List<float>();
-    //             // for (var i = 0; i < (int)lengthAsync; i++) {
-    //             //     channelData[i] = Math.sin(2 * Math.PI * frequency * (i / sampleRate)); // Sine wave
-    //             // }
-
-    //             var ch = await buf.GetChannelDataAsync(0);
-
-    //             for (ulong i = 0; i < lengthAsync; i++)
-    //             {
-    //                 var val = (float)Math.Sin(2 * Math.PI * 1250 * (i / sampleRate));
-    //                 await ch.FillAsync(val, (long)i);
-    //             }
-
-    //             this.loadedBuffers[track] = buf;
-    //         }
-    //         else
-    //         {
-    //             this.loadedTracks[this.currentTrack] = await this.HttpClient.GetByteArrayAsync(track);
-    //             this.loadedBuffers[track] = await this.context.DecodeAudioDataAsync(this.loadedTracks[this.currentTrack]);
-    //         }
-    //     }
-
-    //     this.currentAudioBuffer = this.loadedBuffers[track];
-    //     this.trackDuration = await this.currentAudioBuffer.GetDurationAsync();
-
-    //     this.currentTrackLoaded = true;
-    // }
 
     public async Task<AudioBuffer> GenerateSilenceBuffer(int seconds, bool halfTimeBeep = false)
     {
@@ -367,9 +311,9 @@ Welcome to your new app.
         this.tracks.Add(trackStopName);
     }
 
-    private async Task AddWorkoutTrack()
+    private async Task AddSilenceTrack()
     {
-        if (int.TryParse(this.WorkoutInSeconds, out var seconds))
+        if (int.TryParse(this.SilenceInSeconds, out var seconds))
         {
             var buf = await this.GenerateSilenceBuffer(seconds, this.WithBeep);
             var trackName = $"Silence - {seconds} Sekunden{(this.WithBeep ? $" - mit Halbzeit Beep" : "")}";

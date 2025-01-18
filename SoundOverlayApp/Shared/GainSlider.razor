@@ -1,15 +1,8 @@
 ﻿@using KristofferStrube.Blazor.WebAudio
-<label for="@(this.inputId)">Gain</label>
-<input @bind-value="this.Gain"
-       @bind-value:event="oninput"
-       @bind-value:after="GainUpdatedAsync"
-       id="@(this.inputId)"
-       type="range"
-       min="0"
-       max="1"
-       step="0.01"
-       style="width: min(200px, 100%);"/>
-<span class="badge bg-primary">@Math.Round(this.Gain * 100, 0)%</span>
+@* <MudSlider T="float" Value="this.Gain" ValueChanged="value => this.OnValueChangedAsync(value)" Variant="Variant.Filled">Volume</MudSlider> *@
+@* <MudSlider T="float" ValueChanged="this.OnValueChangedAsync" Variant="Variant.Filled">Volume</MudSlider> *@
+<MudSlider T="float" Value="this.Gain" ValueChanged="this.OnValueChangedAsync" Variant="Variant.Filled">Volume</MudSlider>
+<span class="badge bg-primary">@this.Gain%</span>
 
 @code {
 
@@ -19,20 +12,27 @@
     [EditorRequired]
     public GainNode? GainNode { get; set; }
 
-    public float Gain { get; private set; } = 0.05f;
+    public float Gain { get; set; } = 10;
 
     protected override async Task OnParametersSetAsync()
     {
         if (this.GainNode is null) return;
         await using var audioParam = await this.GainNode.GetGainAsync();
-        this.Gain = await audioParam.GetValueAsync();
+        this.Gain = await audioParam.GetValueAsync() * 100;
+        this.StateHasChanged();
     }
 
     public async Task GainUpdatedAsync()
     {
         if (this.GainNode is null) return;
         await using var audioParam = await this.GainNode.GetGainAsync();
-        await audioParam.SetValueAsync(this.Gain);
+        await audioParam.SetValueAsync(this.Gain / 100);
+    }
+
+    private async Task OnValueChangedAsync(float value)
+    {
+        this.Gain = value;
+        await this.GainUpdatedAsync();
     }
 
 }
